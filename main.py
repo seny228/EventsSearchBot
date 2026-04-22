@@ -3,7 +3,7 @@ from telebot import types
 import requests
 from bs4 import BeautifulSoup
 import json
-import random
+
 from dotenv import load_dotenv
 import os
 
@@ -14,47 +14,31 @@ CHANNEL_USERNAME = '@EventsSearch'
 
 bot = telebot.TeleBot(TOKEN)
 
-# ===== СОСТОЯНИЕ =====
 user_mode = {}
+quest_index = {}
+movie_index = {}
 
-# ===== САЙТЫ =====
-sites = [
-    ("🎬 Кино Globus", "https://kino.s-globus.ru/"),
-    ("🎟 Квесты", "https://xn--b1alfrj.xn--b1acdcqi5ci.xn--p1ai"),
-]
-
-# ===== МЕНЮ =====
 def menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🎯 Квесты", "🌐 Квесты с сайта")
     markup.add("🎬 Фильм", "🌐 Сайты")
     return markup
 
-# ===== МЕНЮ КВЕСТОВ =====
 def quest_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("➡️ Ещё квест")
     markup.add("🔙 Назад")
     return markup
 
-# ===== МЕНЮ ФИЛЬМОВ =====
 def movie_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("➡️ Ещё фильм")
     markup.add("🔙 Назад")
     return markup
 
-# ===== ТРЕЙЛЕР =====
-def get_trailer_link(title):
-    query = title.replace(" ", "+") + "+трейлер"
-    return f"https://www.youtube.com/results?search_query={query}"
-
-# ===== ФИЛЬМЫ =====
 def get_movies():
-    url = "https://kino.s-globus.ru/"
-
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get("https://kino.s-globus.ru/", timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
 
         films = []
@@ -76,11 +60,9 @@ def get_movies():
             })
 
         return films
-
     except:
         return []
 
-# ===== КВЕСТЫ С САЙТА =====
 def get_quests_from_site():
     base_url = "https://xn--b1alfrj.xn--b1acdcqi5ci.xn--p1ai"
 
@@ -89,55 +71,49 @@ def get_quests_from_site():
         soup = BeautifulSoup(response.text, 'html.parser')
 
         quests = []
-
         links = soup.find_all('a', href=True)
-        quest_links = []
 
         for link in links:
             href = link['href']
             if "/quest" in href:
-                full_url = base_url + href
-                if full_url not in quest_links:
-                    quest_links.append(full_url)
+                url = base_url + href
 
-        for url in quest_links[:10]:
-            try:
-                r = requests.get(url, timeout=10)
-                s = BeautifulSoup(r.text, 'html.parser')
+                try:
+                    r = requests.get(url, timeout=10)
+                    s = BeautifulSoup(r.text, 'html.parser')
 
-                title_tag = s.find('h1')
-                title = title_tag.get_text(strip=True) if title_tag else "Без названия"
+                    title = s.find('h1').get_text(strip=True)
 
-                data = {}
-                for dt in s.find_all('dt'):
-                    key = dt.get_text(strip=True)
-                    dd = dt.find_next_sibling('dd')
-                    if dd:
-                        data[key] = dd.get_text(strip=True)
+                    data = {}
+                    for dt in s.find_all('dt'):
+                        key = dt.get_text(strip=True)
+                        dd = dt.find_next_sibling('dd')
+                        if dd:
+                            data[key] = dd.get_text(strip=True)
 
-                desc_block = s.find('div', class_='mb-5')
-                description = "Описание отсутствует"
+                    desc_block = s.find('div', class_='mb-5')
+                    description = "Описание отсутствует"
 
-                if desc_block:
-                    p = desc_block.find('p')
-                    if p:
-                        description = p.get_text(strip=True)
+                    if desc_block:
+                        p = desc_block.find('p')
+                        if p:
+                            description = p.get_text(strip=True)
 
-                text = f"🎯 {title}\n\n"
+                    text = f"🎯 {title}\n\n"
 
-                if "Цена" in data:
-                    text += f"💸 Цена: {data['Цена']}\n"
-                if "Команда" in data:
-                    text += f"👥 Игроки: {data['Команда']}\n"
-                if "Время" in data:
-                    text += f"⏱ Время: {data['Время']}\n"
+                    if "Цена" in data:
+                        text += f"💸 Цена: {data['Цена']}\n"
+                    if "Команда" in data:
+                        text += f"👥 Игроки: {data['Команда']}\n"
+                    if "Время" in data:
+                        text += f"⏱ Время: {data['Время']}\n"
 
-                text += f"\n📖 {description}"
+                    text += f"\n📖 {description}"
 
-                quests.append(text)
+                    quests.append(text)
 
-            except Exception as e:
-                print("Ошибка квеста:", e)
+                except:
+                    continue
 
         return quests
 
@@ -145,7 +121,6 @@ def get_quests_from_site():
         print("Ошибка парсинга:", e)
         return []
 
-# ===== КВЕСТЫ ИЗ КАНАЛА =====
 try:
     with open("quests.json", "r", encoding="utf-8") as f:
         quests = json.load(f)
@@ -159,42 +134,24 @@ def save_quests():
 @bot.channel_post_handler(content_types=['photo', 'text'])
 def handle_channel_post(message):
     text = message.caption if message.caption else message.text
-    photo_id = None
+    photo_id = message.photo[-1].file_id if message.photo else None
 
-    if message.photo:
-        photo_id = message.photo[-1].file_id
-
-    quests.append({
-        "text": text,
-        "photo": photo_id
-    })
-
+    quests.append({"text": text, "photo": photo_id})
     save_quests()
-    print("✅ Сохранено из канала")
 
-# ===== START =====
 @bot.message_handler(commands=['start'])
 def start(message):
-    text = (
-        f"👋 Привет, {message.from_user.first_name}!\n\n"
-        "🎯 Я помогу тебе найти:\n"
-        "• квесты\n"
-        "• фильмы 🎬\n"
-        "• сайты 🌐\n\n"
-        "👇 Выбирай:"
-    )
+    bot.send_message(message.chat.id, "👋 Привет! Выбери:", reply_markup=menu())
 
-    bot.send_message(message.chat.id, text, reply_markup=menu())
-
-# ===== КВЕСТЫ (КАНАЛ) =====
-@bot.message_handler(func=lambda message: message.text == "🎯 Квесты")
+@bot.message_handler(func=lambda message: "Квесты" in message.text and "с сайта" not in message.text)
 def send_quest(message):
     user_mode[message.chat.id] = "channel"
 
     if not quests:
-        bot.send_message(message.chat.id, "Пока нет квестов 😢")
+        bot.send_message(message.chat.id, "Нет квестов 😢")
         return
 
+    import random
     quest = random.choice(quests)
 
     if quest["photo"]:
@@ -202,86 +159,95 @@ def send_quest(message):
     else:
         bot.send_message(message.chat.id, quest["text"], reply_markup=quest_menu())
 
-# ===== КВЕСТЫ (САЙТ) =====
-@bot.message_handler(func=lambda message: message.text == "🌐 Квесты с сайта")
+@bot.message_handler(func=lambda message: "Квесты с сайта" in message.text)
 def site_quests(message):
     user_mode[message.chat.id] = "site"
 
-    bot.send_message(message.chat.id, "🔄 Загружаю...")
+    loading = bot.send_message(message.chat.id, "🔄 Загружаю...")
 
     quests_site = get_quests_from_site()
 
+    try:
+        bot.delete_message(message.chat.id, loading.message_id)
+    except:
+        pass
+
     if not quests_site:
-        bot.send_message(message.chat.id, "❌ Не удалось получить квесты")
+        bot.send_message(message.chat.id, "Ошибка загрузки")
         return
 
-    quest = random.choice(quests_site)
+    chat_id = message.chat.id
+
+    if chat_id not in quest_index:
+        quest_index[chat_id] = 0
+
+    quest = quests_site[quest_index[chat_id]]
+
+    quest_index[chat_id] += 1
+    if quest_index[chat_id] >= len(quests_site):
+        quest_index[chat_id] = 0
+
     bot.send_message(message.chat.id, quest, reply_markup=quest_menu())
 
-# ===== ЕЩЁ КВЕСТ =====
-@bot.message_handler(func=lambda message: message.text == "➡️ Ещё квест")
+@bot.message_handler(func=lambda message: "Ещё квест" in message.text)
 def more_quest(message):
-    mode = user_mode.get(message.chat.id)
-
-    if mode == "channel":
-        send_quest(message)
-    elif mode == "site":
+    if user_mode.get(message.chat.id) == "site":
         site_quests(message)
     else:
-        bot.send_message(message.chat.id, "Сначала выбери раздел 👇", reply_markup=menu())
+        send_quest(message)
 
-# ===== ФИЛЬМЫ =====
-@bot.message_handler(func=lambda message: message.text == "🎬 Фильм")
+@bot.message_handler(func=lambda message: "Фильм" in message.text)
 def movie(message):
     user_mode[message.chat.id] = "movie"
 
+    loading = bot.send_message(message.chat.id, "🔄 Загружаю фильмы...")
+
     films = get_movies()
 
+    try:
+        bot.delete_message(message.chat.id, loading.message_id)
+    except:
+        pass
+
     if not films:
-        bot.send_message(message.chat.id, "❌ Не удалось получить фильмы")
+        bot.send_message(message.chat.id, "❌ Нет фильмов")
         return
 
-    film = random.choice(films)
-    trailer_link = get_trailer_link(film["title"])
+    chat_id = message.chat.id
 
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🎬 Смотреть трейлер", url=trailer_link))
+    if chat_id not in movie_index:
+        movie_index[chat_id] = 0
+
+    film = films[movie_index[chat_id]]
+
+    movie_index[chat_id] += 1
+    if movie_index[chat_id] >= len(films):
+        movie_index[chat_id] = 0
 
     try:
         if film["image"]:
-            bot.send_photo(message.chat.id, film["image"], caption=f"🎬 {film['title']}", reply_markup=markup)
+            bot.send_photo(message.chat.id, film["image"], caption=f"🎬 {film['title']}")
         else:
-            bot.send_message(message.chat.id, f"🎬 {film['title']}", reply_markup=markup)
+            bot.send_message(message.chat.id, f"🎬 {film['title']}")
     except:
-        bot.send_message(message.chat.id, f"🎬 {film['title']}", reply_markup=markup)
+        bot.send_message(message.chat.id, f"🎬 {film['title']}")
 
     bot.send_message(message.chat.id, "👇 Выбери:", reply_markup=movie_menu())
 
-# ===== ЕЩЁ ФИЛЬМ =====
-@bot.message_handler(func=lambda message: message.text == "➡️ Ещё фильм")
+@bot.message_handler(func=lambda message: "Ещё фильм" in message.text)
 def more_movie(message):
-    mode = user_mode.get(message.chat.id)
+    movie(message)
 
-    if mode == "movie":
-        movie(message)
-    else:
-        bot.send_message(message.chat.id, "Сначала выбери раздел 👇", reply_markup=menu())
-
-# ===== САЙТЫ =====
-@bot.message_handler(func=lambda message: message.text == "🌐 Сайты")
+@bot.message_handler(func=lambda message: "Сайты" in message.text)
 def show_sites(message):
     markup = types.InlineKeyboardMarkup()
-
-    for name, url in sites:
-        markup.add(types.InlineKeyboardButton(text=name, url=url))
-
+    markup.add(types.InlineKeyboardButton("🎬 Кино", url="https://kino.s-globus.ru/"))
+    markup.add(types.InlineKeyboardButton("🎟 Квесты", url="https://xn--b1alfrj.xn--b1acdcqi5ci.xn--p1ai"))
     bot.send_message(message.chat.id, "Выбери:", reply_markup=markup)
 
-# ===== НАЗАД =====
-@bot.message_handler(func=lambda message: message.text == "🔙 Назад")
+@bot.message_handler(func=lambda message: "Назад" in message.text)
 def back(message):
     bot.send_message(message.chat.id, "Главное меню 👇", reply_markup=menu())
 
-# ===== ЗАПУСК =====
-print("🚀 Бот запущен...")
+print("Запущен")
 bot.polling(none_stop=True)
