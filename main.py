@@ -250,4 +250,8 @@ def back(message):
     bot.send_message(message.chat.id, "Главное меню 👇", reply_markup=menu())
 
 print("Запущен")
-bot.polling(none_stop=True)
+while True:
+    try:
+        bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    except Exception as e:
+        print("Ошибка:", e)
