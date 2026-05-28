@@ -15,6 +15,7 @@ CHANNEL_USERNAME = '@EventsSearch'
 bot = telebot.TeleBot(TOKEN)
 
 user_mode = {}
+user_quest_index = {}
 quest_index = {}
 movie_index = {}
 
@@ -151,8 +152,17 @@ def send_quest(message):
         bot.send_message(message.chat.id, "Нет квестов 😢")
         return
 
-    import random
-    quest = random.choice(quests)
+    if message.chat.id not in user_quest_index:
+    user_quest_index[message.chat.id] = 0
+
+index = user_quest_index[message.chat.id]
+
+if index >= len(quests):
+    index = 0
+
+quest = quests[index]
+
+user_quest_index[message.chat.id] = index + 1
 
     if quest["photo"]:
         bot.send_photo(message.chat.id, quest["photo"], caption=quest["text"], reply_markup=quest_menu())
