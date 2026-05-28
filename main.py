@@ -44,7 +44,7 @@ def get_movies():
         films = []
 
         for film in soup.find_all('div', class_='film'):
-            title = film.get_text(strip=True)
+            title = title_tag.get_text(" ", strip=True)
 
             img_tag = film.find('img')
             image = None
